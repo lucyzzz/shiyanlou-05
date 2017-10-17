@@ -2,6 +2,9 @@
 # coding : utf-8
 import sys
 import os
+from multiprocessing import Process, Queue ,Value
+
+
 class Config:
     def __init__(self,configfile):
         self.configfile = configfile
@@ -15,24 +18,24 @@ class Config:
                 vule = line.split("=")[1].strip()
                 self.config[name] = vule
 
-
-    def get_config(self,name):
-        return self.config[name]
+    def get_config(self):
+        return self.config
 
 
 class UserData:
-    def __init__(self,userdatafile):
+    def __init__(self):
         self.userdata ={
-
         }
+
+    def get_userdata(self,userdatafile):
         with open("user.csv") as file:
             for line in file:
                 line = line.strip()
                 num = line.split(",")[0].strip()
                 wage = line.split(",")[1].strip()
                 self.userdata[num] = wage
-
-    def calculator(self):
+        queue.put(self.userdata)
+    def calculator(self,config):
 
         def table(Taxable_Income):
             if 1500 >= Taxable_Income:
@@ -59,8 +62,11 @@ class UserData:
             '''
             计算税的代码和2主要区别在这里,一个最高值 一个最低值
             '''
-            JiShuL = float(config.get_config("JiShuL"))
-            JiShuH = float(config.get_config("JiShuH"))
+            # JiShuL = float(config.get_config("JiShuL"))
+            # JiShuH = float(config.get_config("JiShuH"))
+
+            JiShuL = float(config["JiShuL"])
+            JiShuH = float(config["JiShuH"])
             if wage < JiShuL:
                 insurance = JiShuL * 0.165  # 计算社保金额
             elif wage > JiShuH:
@@ -83,15 +89,22 @@ class UserData:
             self.content += content+'\n'
 
         self.content = '' #输出内容 用来写入到文件
-        for _ in self.userdata:
-            tax(_,int(self.userdata[_]))
+        userdata = queue.get()  #获取刚才放入队列的用户信息
+        for _ in userdata:
+            tax(_,int(userdata[_]))
+
+        queue.put(self.content)  #把结果放入队列
+
 
     def dumptofile(self, outputfile):
+        content = queue.get()  #获取刚才放入队列的结果
         with open(outputfile,'a') as file:
-            file.write(self.content)
+            file.write(content)
 
 
 if __name__ == "__main__":
+
+    queue =Queue()
     try:
         args = sys.argv[1:]
         configfile = args[args.index('-c')+1]
@@ -105,8 +118,11 @@ if __name__ == "__main__":
         print("Parameter Error")
         sys.exit()
 
-    config = Config(configfile)
-    # # print(aaa.get_config("JiShuL"))
-    bbb = UserData(userdata)
-    bbb.calculator()
-    bbb.dumptofile(outfile)
+
+    config = Config(configfile).get_config()
+
+    Process(target=UserData().get_userdata(userdata)).start()  #开启一个进程获取用户数据
+
+    Process(target=UserData().calculator(config)).start() #我这里一次就计算完了无法开俩进程
+
+    Process(target=UserData().dumptofile(outfile)).start()
