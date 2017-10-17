@@ -2,24 +2,25 @@
 # coding : utf-8
 import sys
 import os
+from backports import configparser
 from multiprocessing import Process, Queue ,Value
+from datetime import date, datetime, timedelta
+import getopt
+
+
 
 
 class Config:
     def __init__(self,configfile):
-        self.configfile = configfile
-        self.config = {
-
+        self.config_dict = {
         }
-        with open(configfile) as file:
-            for line in file:
-                line = line.strip()
-                name = line.split("=")[0].strip()
-                vule = line.split("=")[1].strip()
-                self.config[name] = vule
-
-    def get_config(self):
-        return self.config
+        self.config = configparser.ConfigParser()
+        self.config.read(configfile)
+    def get_config(self,cityname):
+        cityname = cityname.upper()
+        for _ in self.config[cityname]:   #将configparser获取的参数转为dict,因为之前用的dict.
+            self.config_dict[_] = self.config[cityname][_]
+        return self.config_dict
 
 
 class UserData:
@@ -62,11 +63,9 @@ class UserData:
             '''
             计算税的代码和2主要区别在这里,一个最高值 一个最低值
             '''
-            # JiShuL = float(config.get_config("JiShuL"))
-            # JiShuH = float(config.get_config("JiShuH"))
 
-            JiShuL = float(config["JiShuL"])
-            JiShuH = float(config["JiShuH"])
+            JiShuL = float(config["jishul"])
+            JiShuH = float(config["jishuh"])
             if wage < JiShuL:
                 insurance = JiShuL * 0.165  # 计算社保金额
             elif wage > JiShuH:
@@ -83,9 +82,9 @@ class UserData:
 
             # print(num + ":" + str('%.2f' % finally_wage))  # 保留两位小数
             '''工号,税前工资,社保金额,个税金额,税后工资'''
-            content = "{num},{wage},{insurance:.2f},{Tax_payable:.2f},{finally_wage:.2f}".format(num=num,wage=wage,\
+            content = "{num},{wage},{insurance:.2f},{Tax_payable:.2f},{finally_wage:.2f},{date}".format(num=num,wage=wage,\
                                                                                  insurance=insurance,Tax_payable=Tax_payable,\
-                                                                                 finally_wage=finally_wage)
+                                                                                 finally_wage=finally_wage,date=datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S'))
             self.content += content+'\n'
 
         self.content = '' #输出内容 用来写入到文件
@@ -105,8 +104,19 @@ class UserData:
 if __name__ == "__main__":
 
     queue =Queue()
+    def usage(): print("Usage: calculator.py -C cityname -c configfile -d userdata -o resultdata")
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], "ho:", ["help", "output="])
+        for o,a in opts:
+            if o in ("-h", "--help"):
+                usage()
+                sys.exit()
+    except getopt.GetoptError:
+        pass
+
     try:
         args = sys.argv[1:]
+        Cityname = args[args.index('-C') + 1]
         configfile = args[args.index('-c')+1]
         userdata =  args[args.index('-d')+1]
         outfile = args[args.index('-o')+1]
@@ -118,8 +128,8 @@ if __name__ == "__main__":
         print("Parameter Error")
         sys.exit()
 
-
-    config = Config(configfile).get_config()
+    config = Config(configfile).get_config(Cityname)
+    print(config)
 
     Process(target=UserData().get_userdata(userdata)).start()  #开启一个进程获取用户数据
 
